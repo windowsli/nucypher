@@ -928,6 +928,7 @@ class Ursula(Teacher, Character, Worker):
                  work_tracker: WorkTracker = None,
                  start_working_now: bool = True,
                  client_password: str = None,
+                 block_until_bonded: bool = True,
 
                  # Character
                  abort_on_learning_error: bool = False,
@@ -1009,7 +1010,8 @@ class Ursula(Teacher, Character, Worker):
                             checksum_address=checksum_address,
                             worker_address=worker_address,
                             work_tracker=work_tracker,
-                            start_working_now=start_working_now)
+                            start_working_now=start_working_now,
+                            block_until_bonded=block_until_bonded)
 
         if not crypto_power or (TLSHostingPower not in crypto_power):
 
