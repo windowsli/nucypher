@@ -845,6 +845,17 @@ class Bob(Character):
 
         return cleartexts
 
+    def matching_nodes_among(self, nodes: FleetStateTracker):
+        # Super undramatic "micro-hamming-distance".  About a 1-in-4 chance of placing it on a node.
+        # The good news is that Bob can construct the list easily.
+        # And - famous last words incoming - there's no cognizable attack surface.
+        # Sure, Bob can mine encrypting keypairs until he gets the set of target Ursulas on which Alice can
+        # store a TreasureMap.  And then... ???... profit?
+        target_hex_match = self.public_keys(DecryptingPower).hex()[1]
+        # This might be a performance issue above a few thousand nodes.
+        target_nodes = [node for node in nodes if target_hex_match in node.checksum_address[2:6]]
+        return target_nodes
+
     def make_web_controller(drone_bob, crash_on_error: bool = False):
 
         app_name = bytes(drone_bob.stamp).hex()[:6]
