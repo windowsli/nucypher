@@ -16,6 +16,7 @@ along with nucypher.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import json
+import random
 from base64 import b64encode, b64decode
 from collections import OrderedDict
 from datetime import datetime
@@ -73,7 +74,7 @@ from nucypher.datastore.threading import ThreadedSession
 from nucypher.network.exceptions import NodeSeemsToBeDown
 from nucypher.network.middleware import RestMiddleware
 from nucypher.network.nicknames import nickname_from_seed
-from nucypher.network.nodes import NodeSprout
+from nucypher.network.nodes import NodeSprout, FleetStateTracker
 from nucypher.network.nodes import Teacher
 from nucypher.network.protocols import InterfaceInfo, parse_node_uri
 from nucypher.network.trackers import AvailabilityTracker
@@ -193,7 +194,7 @@ class Alice(Character, BlockchainPolicyAuthor):
 
     def create_policy(self, bob: "Bob", label: bytes, **policy_params):
         """
-        Create a Policy to share uri with bob.
+        Create a Policy so that Bob has access to all resources under label.
         Generates KFrags and attaches them.
         """
 
@@ -565,7 +566,7 @@ class Bob(Character):
         map_id = keccak_digest(bytes(verifying_key) + hrac).hex()
         return hrac, map_id
 
-    def get_treasure_map_from_known_ursulas(self, network_middleware, map_id):
+    def get_treasure_map_from_known_ursulas(self, network_middleware, map_id, timeout=3):
         """
         Iterate through the nodes we know, asking for the TreasureMap.
         Return the first one who has it.
@@ -574,30 +575,35 @@ class Bob(Character):
             from nucypher.policy.collections import TreasureMap as _MapClass
         else:
             from nucypher.policy.collections import DecentralizedTreasureMap as _MapClass
-        for node in self.known_nodes.shuffled():
-            try:
-                response = network_middleware.get_treasure_map_from_node(node=node, map_id=map_id)
-            except NodeSeemsToBeDown:
-                continue
-            except network_middleware.NotFound:
-                self.log.info(f"Node {node} claimed not to have TreasureMap {map_id}")
-                continue
 
-            if response.status_code == 200 and response.content:
+        start = maya.now()
+        while True:
+            if (start - maya.now()).seconds > timeout:
+                raise _MapClass.NowhereToBeFound(f"Asked {len(self.known_nodes)} nodes, but none had map {map_id} ")
+
+            nodes_with_map = self.matching_nodes_among(self.known_nodes)
+            random.shuffle(nodes_with_map)
+
+            for node in nodes_with_map:
                 try:
-                    treasure_map = _MapClass.from_bytes(response.content)
-                except InvalidSignature:
-                    # TODO: What if a node gives a bunk TreasureMap?  NRN
-                    raise
-                break
-            else:
-                continue  # TODO: Actually, handle error case here.  NRN
-        else:
-            # TODO: Work out what to do in this scenario -
-            #       if Bob can't get the TreasureMap, he needs to rest on the learning mutex or something.  NRN
-            raise _MapClass.NowhereToBeFound(f"Asked {len(self.known_nodes)} nodes, but none had map {map_id} ")
+                     response = network_middleware.get_treasure_map_from_node(node=node, map_id=map_id)
+                except NodeSeemsToBeDown:
+                    continue
+                except network_middleware.NotFound:
+                    self.log.info(f"Node {node} claimed not to have TreasureMap {map_id}")
+                    continue
 
-        return treasure_map
+                if response.status_code == 200 and response.content:
+                    try:
+                        treasure_map = _MapClass.from_bytes(response.content)
+                        return treasure_map
+                    except InvalidSignature:
+                        # TODO: What if a node gives a bunk TreasureMap?  NRN
+                        raise
+                else:
+                    continue  # TODO: Actually, handle error case here.  NRN
+            else:
+                self.learn_from_teacher_node()
 
     def work_orders_for_capsules(self,
                                  *capsules,
