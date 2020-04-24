@@ -55,7 +55,7 @@ from nucypher.crypto.powers import (
     DecryptingPower,
     NoSigningPower,
     CryptoPowerUp,
-    DelegatingPower
+    DelegatingPower, TransactingPower, NoTransactingPower
 )
 from nucypher.crypto.signing import signature_splitter, StrangerStamp, SignatureStamp
 from nucypher.network.middleware import RestMiddleware
@@ -227,7 +227,12 @@ class Character(Learner):
             self.keyring_root = STRANGER
             self.network_middleware = STRANGER
 
-        self._set_checksum_address(checksum_address)
+        # TODO: Figure out when to do this.
+        try:
+            _transacting_power = self._crypto_power.power_ups(TransactingPower)
+            self._set_checksum_address(checksum_address)
+        except NoTransactingPower:
+            pass # Hmm, so this Character has no checksum address at all.  Is that what we want?
 
         #
         # Nicknames
